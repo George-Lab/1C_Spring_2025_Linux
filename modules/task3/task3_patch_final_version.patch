@@ -1,0 +1,107 @@
+diff --git a/fs/proc/base.c b/fs/proc/base.c
+index 7feb8f41a..01533e970 100644
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -521,6 +521,29 @@ static int proc_pid_schedstat(struct seq_file *m, struct pid_namespace *ns,
+ 
+ 	return 0;
+ }
++
++/*
++* Task 3
++*/
++static int proc_pid_schedcount(struct seq_file *m, struct pid_namespace *ns,
++			      struct pid *pid, struct task_struct *task)
++{
++	if (unlikely(!sched_info_on())) {
++		seq_puts(m, "0\n");
++	} else {
++		int sched_count = atomic64_read(&task->sched_count);
++		seq_printf(m, "%d\n", sched_count);
++	}
++
++	return 0;
++}
++
++// static int proc_pid_sched_count(struct seq_file *m, struct pid_namespace *ns,
++//                    struct pid *pid, struct task_struct *task)
++// {
++//     seq_printf(m, "%d\n", atomic_read(&task->sched_count));
++//     return 0;
++// }
+ #endif
+ 
+ #ifdef CONFIG_LATENCYTOP
+@@ -3375,6 +3398,11 @@ static const struct pid_entry tgid_base_stuff[] = {
+ #endif
+ #ifdef CONFIG_SCHED_INFO
+ 	ONE("schedstat",  S_IRUGO, proc_pid_schedstat),
++
++	/*
++	* Task 3
++	*/
++	ONE("schedcount",  S_IRUGO, proc_pid_schedcount),
+ #endif
+ #ifdef CONFIG_LATENCYTOP
+ 	REG("latency",  S_IRUGO, proc_lstats_operations),
+@@ -3724,6 +3752,11 @@ static const struct pid_entry tid_base_stuff[] = {
+ #endif
+ #ifdef CONFIG_SCHED_INFO
+ 	ONE("schedstat", S_IRUGO, proc_pid_schedstat),
++
++	/*
++	* Task 3
++	*/
++	ONE("schedcount",  S_IRUGO, proc_pid_schedcount),
+ #endif
+ #ifdef CONFIG_LATENCYTOP
+ 	REG("latency",  S_IRUGO, proc_lstats_operations),
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 6e5c38718..7bcd8fd72 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1626,6 +1626,11 @@ struct task_struct {
+ 	struct user_event_mm		*user_event_mm;
+ #endif
+ 
++	/*
++	 * Task 3
++	 */
++	atomic64_t sched_count;
++
+ 	/*
+ 	 * New fields for task_struct should be added above here, so that
+ 	 * they are included in the randomized portion of task_struct.
+diff --git a/kernel/fork.c b/kernel/fork.c
+index ca2ca3884..296bd4dcb 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -2237,6 +2237,12 @@ __latent_entropy struct task_struct *copy_process(
+ 	p = dup_task_struct(current, node);
+ 	if (!p)
+ 		goto fork_out;
++
++	/*
++	 * Task 3
++	 */
++	atomic64_set(&p->sched_count, 0);
++
+ 	p->flags &= ~PF_KTHREAD;
+ 	if (args->kthread)
+ 		p->flags |= PF_KTHREAD;
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 3c7c942c7..ade5353ca 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -6797,6 +6797,11 @@ static inline void sched_submit_work(struct task_struct *tsk)
+ 	 */
+ 	lock_map_acquire_try(&sched_map);
+ 
++	/*
++	 * Task 3
++	 */
++	atomic64_add(1, &tsk->sched_count);
++
+ 	task_flags = tsk->flags;
+ 	/*
+ 	 * If a worker goes to sleep, notify and ask workqueue whether it
